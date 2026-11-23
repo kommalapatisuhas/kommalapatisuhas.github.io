@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<title>CLIPBOARD_</title>
+<style>
+  :root{
+    --bg:#000; --panel:#050805; --green:#33ff66; --dim:#1f9940; --yellow:#ffd633; --red:#ff5555; --line:#14551f;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--green);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:16px}
+  body{padding:env(safe-area-inset-top) 12px calc(env(safe-area-inset-bottom) + 24px) 12px;max-width:900px;margin:0 auto}
+  header{position:sticky;top:0;background:var(--bg);padding:12px 0 8px;z-index:5;border-bottom:1px solid var(--line)}
+  h1{margin:0 0 8px;font-size:18px;color:var(--yellow);letter-spacing:1px}
+  h1 .cur{animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  button{font:inherit;font-size:14px;background:transparent;color:var(--green);border:1px solid var(--green);
+    padding:9px 12px;border-radius:8px;cursor:pointer;touch-action:manipulation;min-height:40px}
+  button:active{background:var(--green);color:#000}
+  button.y{color:var(--yellow);border-color:var(--yellow)}
+  button.y:active{background:var(--yellow);color:#000}
+  button.r{color:var(--red);border-color:var(--red)}
+  button.r:active{background:var(--red);color:#000}
+  button.on{background:var(--yellow);color:#000;border-color:var(--yellow)}
+  .ib{width:44px;height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+  .ib svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+  .count{color:var(--yellow);min-width:70px;text-align:center}
+  .clip{border:1px solid var(--line);border-radius:14px;margin:14px 0;padding:10px;background:var(--panel)}
+  .clip-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+  .clip-head .label{color:var(--yellow);flex:1 1 100%;display:flex;gap:6px;align-items:center}
+  .clip-head .label span{color:var(--dim)}
+  .body{display:flex;gap:8px;align-items:flex-start}
+  .body textarea{flex:1;min-width:0;width:auto;min-height:194px}
+  .side{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+  .title{flex:1;background:transparent;border:0;border-bottom:1px dashed var(--line);color:var(--yellow);
+    font:inherit;font-size:16px;padding:4px 2px;outline:none;min-width:0}
+  textarea{width:100%;min-height:110px;resize:vertical;background:#000;color:var(--yellow);border:1px solid var(--line);
+    font:inherit;font-size:16px;padding:10px;border-radius:10px;outline:none;caret-color:var(--green);
+    transition:filter .15s;-webkit-appearance:none}
+  textarea:focus{border-color:var(--green)}
+  textarea::placeholder{color:var(--dim)}
+  .clip.paste textarea{border-color:var(--yellow);box-shadow:0 0 0 2px rgba(255,214,51,.35)}
+  textarea.blur{filter:blur(7px)}
+  .meta{color:var(--dim);font-size:12px;margin-top:4px}
+  #jsonBox{display:none;margin:12px 0;border:1px solid var(--yellow);border-radius:14px;padding:10px}
+  #jsonBox.show{display:block}
+  #jsonBox textarea{min-height:160px;font-size:13px;color:var(--yellow);border-color:var(--yellow)}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 20px);transform:translateX(-50%);
+    background:var(--green);color:#000;padding:8px 14px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+  #toast.show{opacity:1}
+  .hint{color:var(--dim);font-size:12px;margin:8px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>&gt; CLIPBOARD<span class="cur">_</span></h1>
+  <div class="bar">
+    <button id="minus" aria-label="Remove a clip">[ - ]</button>
+    <span class="count" id="count">0 clips</span>
+    <button id="plus" aria-label="Add a clip">[ + ]</button>
+    <button id="export" class="y">EXPORT</button>
+    <button id="import" class="y">IMPORT</button>
+    <button id="blurAll">BLUR ALL</button>
+    <button id="clearAll" class="r">CLEAR ALL</button>
+  </div>
+</header>
+
+<div id="jsonBox">
+  <div class="hint" id="jsonHint">JSON:</div>
+  <textarea id="jsonText" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Paste JSON here, then press LOAD"></textarea>
+  <div class="bar" style="margin-top:8px">
+    <button id="jCopy">COPY JSON</button>
+    <button id="jDownload">DOWNLOAD .json</button>
+    <button id="jLoad" class="y">LOAD</button>
+    <button id="jFile">FROM FILE</button>
+    <button id="jClose" class="r">CLOSE</button>
+  </div>
+  <input type="file" id="fileIn" accept=".json,application/json,text/plain" hidden>
+  <div class="hint">LOAD replaces all current clips with the JSON contents.</div>
+</div>
+
+<main id="list"></main>
+<div class="hint">Data is saved on this device (localStorage). Export JSON to back up.</div>
+<div id="toast"></div>
+
+<script>
+(function(){
+  var KEY='terminal-clipboard-v1';
+  var state={clips:[]};
+  var $=function(id){return document.getElementById(id)};
+  var list=$('list');
+
+  function newClip(i){return {title:'clip '+(i+1),text:'',blur:false,created:new Date().toISOString()}}
+  function fmt(iso){
+    var d=new Date(iso);if(isNaN(d))return '--';
+    function z(n){return n<10?'0'+n:''+n}
+    return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+' '+z(d.getHours())+':'+z(d.getMinutes())+':'+z(d.getSeconds());
+  }
+  var ICON={
+    copy:'<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    paste:'<svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
+    blur:'<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    clear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>'
+  };
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+  function load(){
+    try{var s=JSON.parse(localStorage.getItem(KEY)||'null');
+      if(s&&Array.isArray(s.clips)&&s.clips.length){s.clips.forEach(function(c){if(!c.created)c.created=new Date().toISOString()});state=s;return}}catch(e){}
+    state={clips:[newClip(0),newClip(1),newClip(2)]};
+  }
+  function toast(msg,ms){
+    var t=$('toast');t.textContent=msg;t.classList.add('show');
+    clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove('show')},ms||1500);
+  }
+
+  // iOS-safe copy: try async API, fall back to selection + execCommand
+  function copyText(text,srcEl){
+    function fallback(){
+      var ta=srcEl||document.createElement('textarea');
+      var temp=!srcEl;
+      if(temp){ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta)}
+      var wasBlur=ta.classList.contains('blur');
+      var ro=ta.readOnly;ta.readOnly=true;ta.focus();ta.select();ta.setSelectionRange(0,999999);
+      var ok=false;try{ok=document.execCommand('copy')}catch(e){}
+      ta.readOnly=ro;ta.blur();
+      if(temp)document.body.removeChild(ta);
+      toast(ok?'COPIED':'COPY FAILED - long-press to copy');
+    }
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){toast('COPIED')},fallback);
+    }else fallback();
+  }
+
+  function render(){
+    list.innerHTML='';
+    state.clips.forEach(function(c,i){
+      var d=document.createElement('section');d.className='clip';
+      d.innerHTML=
+        '<div class="clip-head">'+
+          '<div class="label"><span>#'+(i+1)+'</span><input class="title" spellcheck="false" autocapitalize="off" autocorrect="off"></div>'+
+        '</div>'+
+        '<div class="body">'+
+          '<textarea spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="paste or type here..."></textarea>'+
+          '<div class="side">'+
+            '<button class="ib" data-a="copy" title="Copy" aria-label="Copy">'+ICON.copy+'</button>'+
+            '<button class="ib y" data-a="paste" title="Paste" aria-label="Paste">'+ICON.paste+'</button>'+
+            '<button class="ib" data-a="blur" title="Blur" aria-label="Blur">'+ICON.blur+'</button>'+
+            '<button class="ib r" data-a="clear" title="Clear" aria-label="Clear">'+ICON.clear+'</button>'+
+          '</div>'+
+        '</div>'+
+        '<div class="meta"></div>';
+      var ti=d.querySelector('.title'),ta=d.querySelector('textarea'),meta=d.querySelector('.meta'),bb=d.querySelector('[data-a=blur]');
+      ti.value=c.title;ta.value=c.text;
+      function refresh(){
+        ta.classList.toggle('blur',!!c.blur);bb.classList.toggle('on',!!c.blur);
+        meta.textContent='created '+fmt(c.created)+'  |  '+c.text.length+' chars';
+      }
+      refresh();
+      ta.addEventListener('blur',function(){d.classList.remove('paste')});
+      ti.addEventListener('input',function(){c.title=ti.value;save()});
+      ta.addEventListener('input',function(){c.text=ta.value;refresh();save()});
+      d.addEventListener('click',function(e){
+        var btn=e.target.closest&&e.target.closest('button[data-a]');if(!btn)return;var a=btn.getAttribute('data-a');
+        if(a==='copy'){
+          if(!c.text){toast('EMPTY');return}
+          copyText(c.text,ta);
+        }else if(a==='paste'){
+          var manual=function(){
+            d.classList.add('paste');ta.focus();
+            toast('Tap inside the box, then tap Paste',4000);
+          };
+          if(navigator.clipboard&&navigator.clipboard.readText){
+            navigator.clipboard.readText().then(function(t){
+              if(!t){toast('CLIPBOARD EMPTY');return}
+              c.text=t;ta.value=t;refresh();save();toast('PASTED');
+            }).catch(manual);
+          }else manual();
+        }else if(a==='blur'){
+          c.blur=!c.blur;refresh();save();
+        }else if(a==='clear'){
+          c.text='';ta.value='';refresh();save();toast('CLEARED');
+        }
+      });
+      list.appendChild(d);
+    });
+    $('count').textContent=state.clips.length+(state.clips.length===1?' clip':' clips');
+    $('minus').disabled=state.clips.length<=1;
+    $('minus').style.opacity=state.clips.length<=1?.4:1;
+    updateBlurAll();
+  }
+  function updateBlurAll(){
+    var all=state.clips.length&&state.clips.every(function(c){return c.blur});
+    $('blurAll').classList.toggle('on',!!all);
+  }
+
+  $('plus').onclick=function(){
+    if(state.clips.length>=100){toast('MAX 100');return}
+    state.clips.push(newClip(state.clips.length));save();render();
+    window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+  };
+  $('minus').onclick=function(){
+    if(state.clips.length<=1)return;
+    var last=state.clips[state.clips.length-1];
+    if(last.text&&!confirm('Remove last clip? It has content.'))return;
+    state.clips.pop();save();render();
+  };
+  $('blurAll').onclick=function(){
+    var all=state.clips.every(function(c){return c.blur});
+    state.clips.forEach(function(c){c.blur=!all});save();render();
+  };
+  $('clearAll').onclick=function(){
+    if(!confirm('Clear content of ALL clips?'))return;
+    state.clips.forEach(function(c){c.text=''});save();render();toast('ALL CLEARED');
+  };
+
+  // JSON
+  function toJSON(){
+    return JSON.stringify({
+      app:'terminal-clipboard',version:1,exportedAt:new Date().toISOString(),
+      clips:state.clips.map(function(c,i){return {id:i+1,title:c.title,created:c.created,text:c.text,blur:!!c.blur}})
+    },null,2);
+  }
+  function openBox(mode){
+    $('jsonBox').classList.add('show');
+    if(mode==='export'){$('jsonText').value=toJSON();$('jsonHint').textContent='EXPORT - JSON of all clips:'}
+    else{$('jsonText').value='';$('jsonHint').textContent='IMPORT - paste JSON or choose a file:'}
+    $('jsonBox').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  $('export').onclick=function(){openBox('export')};
+  $('import').onclick=function(){openBox('import')};
+  $('jClose').onclick=function(){$('jsonBox').classList.remove('show')};
+  $('jCopy').onclick=function(){
+    var t=$('jsonText');if(!t.value)t.value=toJSON();copyText(t.value,t);
+  };
+  $('jDownload').onclick=function(){
+    var blob=new Blob([toJSON()],{type:'application/json'});
+    var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download='clipboard-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+  };
+  $('jFile').onclick=function(){$('fileIn').click()};
+  $('fileIn').onchange=function(){
+    var f=this.files[0];if(!f)return;
+    var r=new FileReader();r.onload=function(){$('jsonText').value=r.result;toast('FILE READ - press LOAD')};
+    r.readAsText(f);this.value='';
+  };
+  $('jLoad').onclick=function(){
+    var raw=$('jsonText').value.trim();
+    if(!raw){
+      if(navigator.clipboard&&navigator.clipboard.readText){
+        navigator.clipboard.readText().then(function(t){$('jsonText').value=t;toast('Pasted - press LOAD again')}).catch(function(){toast('Paste JSON first')});
+      }else toast('Paste JSON first');
+      return;
+    }
+    try{
+      var data=JSON.parse(raw);
+      var arr=Array.isArray(data)?data:data.clips;
+      if(!Array.isArray(arr))throw new Error('no clips');
+      var clips=arr.map(function(c,i){
+        var now=new Date().toISOString();
+        if(typeof c==='string')return {title:'clip '+(i+1),text:c,blur:false,created:now};
+        return {title:String(c.title!=null?c.title:'clip '+(i+1)),text:String(c.text!=null?c.text:(c.content!=null?c.content:'')),blur:!!c.blur,created:(c.created&&!isNaN(new Date(c.created)))?c.created:now};
+      });
+      if(!clips.length)throw new Error('empty');
+      if(!confirm('Replace current clips with '+clips.length+' imported clip(s)?'))return;
+      state.clips=clips;save();render();
+      $('jsonBox').classList.remove('show');toast('LOADED '+clips.length+' CLIPS');
+      window.scrollTo({top:0,behavior:'smooth'});
+    }catch(e){toast('INVALID JSON')}
+  };
+
+  load();render();
+})();
+</script>
+</body>
+</html>
